@@ -1,51 +1,40 @@
 # OCR Tool Skill
 
-`ocr-tool` is an installable Agent Skill for extracting text from PDFs with `pdfocr`.
+`ocr-tool` is an installable Agent Skill for extracting text from PDFs with
+`pdfocr`.
 
 ## Features
 
-It handles the OCR-specific part of the workflow:
-- Extracts text from full PDFs or selected page ranges.
-- Reuses cached OCR output when the same file and page selection are requested again.
-- Installs `pdfocr` on demand when it is missing.
-- Returns clean extracted text for downstream skills or tasks.
+It provides one workflow:
+- extracts text from full PDFs or selected page ranges
+- reuses cached OCR output when the same file and page selection is requested again
+- installs `pdfocr` when needed
+- returns cleaned extracted text for downstream skills or tasks
 
-This skill is intentionally limited to extraction. Use another skill after OCR if you want notes, flashcards, quizzes, or other transformed outputs.
+This skill is intentionally limited to extraction. Use another skill after OCR
+if you want notes, flashcards, quizzes, or other transformed outputs.
 
 ## Requirements
 
-- **`pdfocr`**: Used for PDF-to-text extraction. If it is missing, the agent can attempt installation.
+- **`pdfocr`**: Required for PDF-to-text extraction.
 - **DeepInfra API Key**: Required by `pdfocr`.
-  - Recommended: set `DEEPINFRA_API_KEY`
-  - Alternative: place `config.json` next to the real `pdfocr` binary
+  - Set it via `DEEPINFRA_API_KEY` (recommended).
+  - Or provide it via `config.json` next to the `pdfocr` executable.
 
 ## Installation
 
 ### Using Codex
 
-Codex recommends installing non-built-in skills using the `$skill-installer`. Prompt Codex with:
+Codex recommends installing non-built-in skills using the `$skill-installer`.
+Prompt Codex with:
 
 ```text
 $skill-installer install the skill from repo planetis-m/study-assistant with path ocr-tool
 ```
 
-*(If the skill does not appear immediately, restart Codex).*
-
 ### Manual Install
 
-Clone or copy the `ocr-tool` directory into your agent's scanned skills path (for example `~/.agents/skills/ocr-tool`).
-
-If you are copying from the `study-assistant` repository, preserve the full folder structure:
-
-```text
-ocr-tool/
-  SKILL.md
-  README.md
-  agents/openai.yaml
-  references/ocr-cache.md
-  references/pdfocr-install.md
-  scripts/ocr_cache.py
-```
+Clone or copy `ocr-tool` into your agent's scanned skills path.
 
 ## Usage Examples
 
