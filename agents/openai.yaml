@@ -1,0 +1,4 @@
+interface:
+  display_name: "OCR Tool"
+  short_description: "Extract PDF text with pdfocr"
+  default_prompt: "Use $ocr-tool to extract text from this PDF with pdfocr, using cache when possible, and return clean OCR text for downstream work."
