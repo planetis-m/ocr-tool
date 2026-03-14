@@ -1,6 +1,6 @@
 # OCR Cache Procedure
 
-Use this procedure for any request that starts from a PDF to avoid redundant OCR execution.
+Use this procedure for any PDF-based request to avoid rerunning OCR on the same file and page selection.
 
 ## 1. Read Cache
 
@@ -9,12 +9,12 @@ python3 <SKILL_PATH>/scripts/ocr_cache.py read \
   --pdf-input "path/to/file.pdf" --page-sel "1-5"
 ```
 
-*(Omit `--page-sel` for full documents).*
+*(Omit `--page-sel` for full-document OCR.)*
 
 **Exit codes:**
-- `0`: Cache hit. The extracted text is printed to stdout. Consume it directly.
-- `3`: Cache miss. Go to **Step 2 (Run & Store)**.
-- `1` or `2`: Error. Stop and report.
+- `0`: Cache hit. The cached text is printed to stdout. Use it directly.
+- `3`: Cache miss. Continue to **Step 2 (Run OCR & Store)**.
+- `1` or `2`: Error. Stop and report the failure.
 
 ## 2. Run OCR & Store (On Miss)
 
@@ -25,6 +25,6 @@ pdfocr "path/to/file.pdf" <OCR_PAGE_ARG> | \
 ```
 
 **Exit codes:**
-- `0`: Text printed to stdout. Consume it directly.
-- `3`: No valid text extracted. Report failure.
-- `1` or `2`: Error. Stop and report.
+- `0`: OCR text is printed to stdout. Use it directly.
+- `3`: No valid text was extracted. Report failure.
+- `1` or `2`: Error. Stop and report the failure.

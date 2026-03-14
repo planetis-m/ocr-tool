@@ -5,44 +5,44 @@ description: Extracts text from PDFs using the `pdfocr` CLI. Use this skill as a
 
 # OCR Tool
 
-Use this skill exclusively to extract source text. Do not generate final processed outputs or summaries here; simply hand off the extracted raw text to the next relevant step unless the user explicitly asks only for the raw OCR text.
+Use this skill only to extract source text. Do not generate final processed outputs or summaries here; hand off the extracted raw text to the next step unless the user explicitly asks only for the OCR text.
 
-Do not add verification steps unless the user explicitly asks for them.
+Do not add verification steps unless the user explicitly asks.
 
 ## Scope
 
 This skill owns all `pdfocr` usage.
 
 - Use it when the input is a PDF that must be converted to text.
-- After extraction, hand the resulting text to the next relevant skill or continue with the user's requested downstream task.
+- After extraction, pass the resulting text to the next relevant skill or continue with the user's downstream task.
 
 ## Session OCR Cache
 
 Use the caching procedure to avoid repeated OCR execution on the same file and page selection.
 
 - Follow [references/ocr-cache.md](references/ocr-cache.md) exactly for the command sequence.
-- Always execute cache commands directly from your current working directory.
+- Run cache commands directly from your current working directory.
 
 ## Process PDF Input
 
 Extract text exclusively through `pdfocr` shell execution.
 
-- Never read PDFs with direct file readers or ad-hoc parsers when this skill is active for extraction.
+- Do not read PDFs with direct file readers or ad hoc parsers when this skill is active.
 
 ### Installation
 
 Run the installation steps only when cache misses, before OCR execution.
 
-- Check with `command -v pdfocr`.
-- If missing, read [references/pdfocr-install.md](references/pdfocr-install.md) and attempt installation.
-- Retry `command -v pdfocr` after installation. If still missing, stop and report.
+- Check for `pdfocr` with `command -v pdfocr`.
+- If it is missing, read [references/pdfocr-install.md](references/pdfocr-install.md) and attempt installation.
+- Check again after installation. If it is still missing, stop and report the failure.
 
 ### Execution
 
-- Request unrestricted network/escalated execution directly in the tool call.
-  Do not run a sandboxed `pdfocr` attempt as a probe.
+- Request unrestricted network or escalated execution directly in the tool call.
+  Do not run a sandboxed `pdfocr` probe first.
 - Do not inspect environment variables, shell profiles, or filesystem files to discover API keys.
-  If OCR reports an auth/config failure, report the error and ask the user to configure
+  If OCR reports an auth or config failure, report the error and ask the user to configure
   `DEEPINFRA_API_KEY` or `config.json`, then retry.
 
 ### Usage
@@ -59,4 +59,4 @@ Before handing extracted text to another task, remove only clear metadata, such 
 - Timestamps
 - Extraneous document identifiers
 
-Preserve all substantive core content. If text is severely fragmented, skip that fragment instead of guessing.
+Preserve all substantive content. If a fragment is too broken to recover confidently, omit it rather than guess.
