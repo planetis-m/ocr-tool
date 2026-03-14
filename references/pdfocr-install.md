@@ -3,9 +3,9 @@
 Use this only when `command -v pdfocr` fails.
 
 Path policy:
-- Use absolute user paths only (`$HOME/.local/...`).
+- Install only to absolute user-space paths such as `$HOME/.local/...`.
 - Never install into a relative workspace path such as `./.local/...`.
-- Never create `.local` under the current project directory.
+- Never create `.local` inside the current project directory.
 
 As of March 6, 2026 (`pdfocr` v0.3.0), release assets exist for:
 - Linux `x86_64`
@@ -64,14 +64,14 @@ pdfocr --help | Out-Null
 
 ## DeepInfra API key configuration
 
-`pdfocr` requires an API key. After installation, present these instructions to the user before running OCR.
+`pdfocr` requires an API key. After installation, give the user these instructions before running OCR.
 
 **Recommended: environment variable**
 Linux/macOS: `export DEEPINFRA_API_KEY="your_api_key"`
 Windows PowerShell: `$env:DEEPINFRA_API_KEY = "your_api_key"`
 
 **Alternative: update config.json**
-Create or edit `config.json` inside the directory where the real binary lives (e.g., `~/.local/opt/pdfocr/current/`) and set:
+Create or edit `config.json` in the directory where the real binary lives (for example `~/.local/opt/pdfocr/current/`) and set:
 ```json
 {
   "api_key": "your_deepinfra_api_key"
@@ -82,6 +82,6 @@ Create or edit `config.json` inside the directory where the real binary lives (e
 
 - Keep all extracted runtime files (`config.json`, `libpdfium`, and platform shared libs) with the real binary.
 - Do not copy only `pdfocr`/`pdfocr.exe` into another directory without its bundled runtime files.
-- Ensure install targets are under user home (`$HOME/.local` or `%USERPROFILE%\\.local`), not the current workspace.
-- If install fails due to permission/sandbox restrictions, request escalated permission and retry.
+- Keep install targets under user home (`$HOME/.local` or `%USERPROFILE%\\.local`), not in the current workspace.
+- If installation fails because of permission or sandbox restrictions, request escalated permission and retry.
 - If platform/architecture is unsupported, stop and ask the user for manual installation steps.
