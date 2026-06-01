@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 CACHE_DIR = Path(".ocr-tool-cache")
+OUTPUT_PATH = CACHE_DIR / "output.txt"
 
 EXIT_OK = 0
 EXIT_RUNTIME_ERROR = 1
@@ -132,11 +133,14 @@ def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, dic
     return pages, bool(lines) and len(pages) == len(lines)
 
 
-def print_pages(pdf: Path, pages: dict[int, dict]) -> None:
+def write_output(pdf: Path, pages: dict[int, dict]) -> None:
     result = [f"File: {pdf.name} | Pages: {len(pages)}"]
     for page_number in sorted(pages):
         result.append(f"\n<page n={page_number}>\n{pages[page_number]['text'].strip()}")
-    print("\n".join(result))
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_text("\n".join(result) + "\n", encoding="utf-8")
+    page_word = "page" if len(pages) == 1 else "pages"
+    print(f"ocr-cache: wrote {len(pages)} {page_word} to {OUTPUT_PATH}")
 
 
 def extract(pdf: Path, selection: str | None) -> int:
@@ -145,7 +149,7 @@ def extract(pdf: Path, selection: str | None) -> int:
 
     if selection is None:
         if cache["complete"]:
-            print_pages(pdf, {int(page): obj for page, obj in cache["pages"].items()})
+            write_output(pdf, {int(page): obj for page, obj in cache["pages"].items()})
             return EXIT_OK
 
         extracted = run_pdfocr(pdf, None)
@@ -184,7 +188,7 @@ def extract(pdf: Path, selection: str | None) -> int:
         missing = [page for page in page_numbers if page not in pages]
         if missing:
             eprint("missing pages: " + ",".join(str(page) for page in missing))
-    print_pages(pdf, pages)
+    write_output(pdf, pages)
     return EXIT_OK
 
 
