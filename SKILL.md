@@ -17,10 +17,15 @@ This skill owns all `pdfocr` usage.
 
 ## Session OCR Cache
 
-Use the caching procedure to avoid repeated OCR execution on the same file and pages.
+Run one cache command for both cache lookup and OCR extraction. The script prints
+cached text immediately when possible. Otherwise it runs `pdfocr`, caches each
+successful page independently, and prints the extracted text. This allows
+overlapping page ranges to reuse work.
 
-- Follow [references/ocr-cache.md](references/ocr-cache.md) exactly.
 - Run cache commands directly from your current working directory.
+- Exit code `0`: OCR text was printed.
+- Exit code `3`: no valid text was extracted.
+- Exit code `1` or `2`: stop and report the failure.
 
 ## Process PDF Input
 
