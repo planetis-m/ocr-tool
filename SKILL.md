@@ -18,9 +18,9 @@ This skill owns all `pdfocr` usage.
 
 ## Session OCR Cache
 
-Use the caching procedure to avoid repeated OCR execution on the same file and page selection.
+Use the caching procedure to avoid repeated OCR execution on the same file and pages.
 
-- Follow [references/ocr-cache.md](references/ocr-cache.md) exactly for the command sequence.
+- Follow [references/ocr-cache.md](references/ocr-cache.md) exactly.
 - Run cache commands directly from your current working directory.
 
 ## Process PDF Input
@@ -31,7 +31,8 @@ Extract text exclusively through `pdfocr` shell execution.
 
 ### Installation
 
-Run the installation steps only when cache misses, before OCR execution.
+Run the installation steps only when the cache command reports that `pdfocr` is
+not installed.
 
 - Check for `pdfocr` with `command -v pdfocr`.
 - If it is missing, read [references/pdfocr-install.md](references/pdfocr-install.md) and attempt installation.
@@ -47,8 +48,8 @@ Run the installation steps only when cache misses, before OCR execution.
 
 ### Usage
 
-- Full document: `pdfocr INPUT.pdf --all-pages`
-- Page ranges: `pdfocr INPUT.pdf --pages:"8-20,22-27"`
+- Full document: `python3 <SKILL_PATH>/scripts/ocr_cache.py INPUT.pdf`
+- Page ranges: `python3 <SKILL_PATH>/scripts/ocr_cache.py INPUT.pdf "8-20,22-27"`
 
 ## Clean OCR Text
 

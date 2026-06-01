@@ -1,30 +1,22 @@
 # OCR Cache Procedure
 
-Use this procedure for any PDF-based request to avoid rerunning OCR on the same file and page selection.
-
-## 1. Read Cache
+Run one command for both cache lookup and OCR extraction:
 
 ```bash
-python3 <SKILL_PATH>/scripts/ocr_cache.py read \
-  --pdf-input "path/to/file.pdf" --page-sel "1-5"
+python3 <SKILL_PATH>/scripts/ocr_cache.py "path/to/file.pdf"
 ```
 
-*(Omit `--page-sel` for full-document OCR.)*
-
-**Exit codes:**
-- `0`: Cache hit. The cached text is printed to stdout. Use it directly.
-- `3`: Cache miss. Continue to **Step 2 (Run OCR & Store)**.
-- `1` or `2`: Error. Stop and report the failure.
-
-## 2. Run OCR & Store (On Miss)
+For selected pages, add the page selection as the final argument:
 
 ```bash
-pdfocr "path/to/file.pdf" <OCR_PAGE_ARG> | \
-  python3 <SKILL_PATH>/scripts/ocr_cache.py store \
-  --pdf-input "path/to/file.pdf" --page-sel "1-5"
+python3 <SKILL_PATH>/scripts/ocr_cache.py "path/to/file.pdf" "1-5,8"
 ```
 
+The script prints cached text immediately when possible. Otherwise it runs
+`pdfocr`, caches each successful page independently, and prints the extracted
+text. This allows later requests for overlapping page ranges to reuse work.
+
 **Exit codes:**
-- `0`: OCR text is printed to stdout. Use it directly.
-- `3`: No valid text was extracted. Report failure.
+- `0`: OCR text was printed.
+- `3`: No valid text was extracted.
 - `1` or `2`: Error. Stop and report the failure.

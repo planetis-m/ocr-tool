@@ -1,132 +1,223 @@
 #!/usr/bin/env python3
-"""Deterministic OCR cache CLI for ocr-tool."""
+"""Run pdfocr and cache each successful page."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
+import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+CACHE_DIR = Path(".ocr-tool-cache")
+ALL_PAGES_FILE = ".all-pages.json"
 
 EXIT_OK = 0
 EXIT_RUNTIME_ERROR = 1
 EXIT_INVALID_ARGS = 2
-EXIT_CACHE_MISS = 3
-
-CACHE_DIR = Path(".ocr-tool-cache")
-DEFAULT_PAGE_SEL = "all-pages"
+EXIT_NO_TEXT = 3
 
 
 def eprint(message: str) -> None:
     print(f"ocr-cache: {message}", file=sys.stderr)
 
 
-def build_raw_path(pdf_input: str, page_sel: str) -> Path:
-    if not pdf_input.strip():
-        eprint("--pdf-input cannot be empty")
-        sys.exit(EXIT_INVALID_ARGS)
+def document_cache_dir(pdf: Path) -> Path:
+    pdf = pdf.expanduser().resolve()
+    if not pdf.is_file():
+        raise ValueError(f"PDF does not exist: {pdf}")
 
-    pdf_norm = str(Path(pdf_input).expanduser().resolve())
-    page_norm = page_sel.strip() if page_sel and page_sel.strip() else DEFAULT_PAGE_SEL
-
-    seed = f"{pdf_norm}\n{page_norm}".encode("utf-8")
-    key = hashlib.sha256(seed).hexdigest()[:32]
-    return CACHE_DIR / f"{key}.jsonl"
+    stat = pdf.stat()
+    seed = f"{pdf}\n{stat.st_size}\n{stat.st_mtime_ns}".encode("utf-8")
+    return CACHE_DIR / hashlib.sha256(seed).hexdigest()[:32]
 
 
-def parse_lines(lines: list[str]) -> tuple[list[dict], bool]:
-    pages = []
-    is_perfect = True
+def parse_pages(selection: str) -> list[int]:
+    pages: set[int] = set()
+    for item in selection.split(","):
+        item = item.strip()
+        if not item:
+            raise ValueError("page selection cannot be empty")
 
+        if "-" in item:
+            start_text, separator, end_text = item.partition("-")
+            if not separator or not start_text.strip().isdigit() or not end_text.strip().isdigit():
+                raise ValueError(f"invalid page selection: {item}")
+            start = int(start_text)
+            end = int(end_text)
+            if start > end:
+                raise ValueError(f"invalid page range: {item}")
+            pages.update(range(start, end + 1))
+        elif item.isdigit():
+            pages.add(int(item))
+        else:
+            raise ValueError(f"invalid page selection: {item}")
+
+    if not pages or min(pages) < 1:
+        raise ValueError("page numbers must be positive")
+    return sorted(pages)
+
+
+def valid_page(obj: object) -> bool:
+    return (
+        isinstance(obj, dict)
+        and obj.get("status") == "ok"
+        and isinstance(obj.get("page"), int)
+        and not isinstance(obj.get("page"), bool)
+        and obj["page"] > 0
+        and isinstance(obj.get("text"), str)
+        and bool(obj["text"].strip())
+    )
+
+
+def read_page(cache_dir: Path, page: int) -> dict | None:
+    try:
+        obj = json.loads((cache_dir / f"{page}.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return obj if valid_page(obj) and obj["page"] == page else None
+
+
+def write_page(cache_dir: Path, obj: dict) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    (cache_dir / f"{obj['page']}.json").write_text(
+        json.dumps(obj, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+
+def read_all_pages(cache_dir: Path) -> list[int] | None:
+    try:
+        pages = json.loads((cache_dir / ALL_PAGES_FILE).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+    if (
+        not isinstance(pages, list)
+        or not pages
+        or any(not isinstance(page, int) or isinstance(page, bool) or page < 1 for page in pages)
+    ):
+        return None
+    return sorted(set(pages))
+
+
+def write_all_pages(cache_dir: Path, pages: list[int]) -> None:
+    (cache_dir / ALL_PAGES_FILE).write_text(json.dumps(sorted(pages)) + "\n", encoding="utf-8")
+
+
+def read_pages(cache_dir: Path, page_numbers: list[int]) -> dict[int, dict]:
+    pages = {}
+    for page_number in page_numbers:
+        obj = read_page(cache_dir, page_number)
+        if obj is not None:
+            pages[page_number] = obj
+    return pages
+
+
+def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, dict], bool] | None:
+    page_arg = "--all-pages"
+    if page_numbers is not None:
+        page_arg = "--pages:" + ",".join(str(page) for page in page_numbers)
+
+    try:
+        result = subprocess.run(
+            ["pdfocr", str(pdf), page_arg],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        eprint("pdfocr is not installed")
+        return None
+
+    if result.stderr.strip():
+        print(result.stderr.rstrip(), file=sys.stderr)
+    if result.returncode != 0:
+        eprint(f"pdfocr failed with exit code {result.returncode}")
+        return None
+
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    pages = {}
     for line in lines:
         try:
             obj = json.loads(line)
-            if obj.get("status") == "ok" and obj.get("text"):
-                pages.append(obj)
-            else:
-                is_perfect = False
-        except Exception:
-            is_perfect = False
+        except json.JSONDecodeError:
+            continue
+        if valid_page(obj):
+            pages[obj["page"]] = obj
 
-    is_perfect = is_perfect and len(pages) == len(lines) and len(lines) > 0
-    return pages, is_perfect
+    return pages, bool(lines) and len(pages) == len(lines)
 
 
-def print_formatted(filename: str, pages: list[dict]) -> None:
-    result = [f"File: {filename} | Pages: {len(pages)}"]
-    for i, obj in enumerate(pages):
-        page_num = obj.get("page", i + 1)
-        text = obj.get("text", "").strip()
-        result.append(f"\n<page n={page_num}>\n{text}")
+def print_pages(pdf: Path, pages: dict[int, dict]) -> None:
+    result = [f"File: {pdf.name} | Pages: {len(pages)}"]
+    for page_number in sorted(pages):
+        result.append(f"\n<page n={page_number}>\n{pages[page_number]['text'].strip()}")
     print("\n".join(result))
 
 
-def cmd_read(args: argparse.Namespace) -> int:
-    raw_path = build_raw_path(args.pdf_input, args.page_sel)
+def extract(pdf: Path, selection: str | None) -> int:
+    cache_dir = document_cache_dir(pdf)
 
-    if not raw_path.exists() or raw_path.stat().st_size == 0:
-        eprint("miss")
-        return EXIT_CACHE_MISS
+    if selection is None:
+        page_numbers = read_all_pages(cache_dir)
+        if page_numbers is not None:
+            pages = read_pages(cache_dir, page_numbers)
+            if len(pages) == len(page_numbers):
+                print_pages(pdf, pages)
+                return EXIT_OK
 
-    lines = [l.strip() for l in raw_path.read_text(encoding="utf-8").splitlines() if l.strip()]
-    pages, _ = parse_lines(lines)
-
-    print_formatted(Path(args.pdf_input).name, pages)
-    return EXIT_OK
-
-
-def cmd_store(args: argparse.Namespace) -> int:
-    raw_path = build_raw_path(args.pdf_input, args.page_sel)
-
-    data = sys.stdin.read()
-    lines = [line.strip() for line in data.splitlines() if line.strip()]
-    pages, is_perfect = parse_lines(lines)
+        extracted = run_pdfocr(pdf, None)
+        if extracted is None:
+            return EXIT_RUNTIME_ERROR
+        pages, complete = extracted
+        for obj in pages.values():
+            write_page(cache_dir, obj)
+        if complete:
+            write_all_pages(cache_dir, list(pages))
+        elif pages:
+            eprint("partial OCR; cached valid pages only")
+    else:
+        page_numbers = parse_pages(selection)
+        pages = read_pages(cache_dir, page_numbers)
+        missing = [page for page in page_numbers if page not in pages]
+        if missing:
+            extracted = run_pdfocr(pdf, missing)
+            if extracted is None:
+                return EXIT_RUNTIME_ERROR
+            new_pages, _ = extracted
+            for obj in new_pages.values():
+                write_page(cache_dir, obj)
+            pages.update(read_pages(cache_dir, missing))
 
     if not pages:
         eprint("no valid OCR text")
-        return EXIT_CACHE_MISS
+        return EXIT_NO_TEXT
 
-    if is_perfect:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            "w", dir=CACHE_DIR, delete=False,
-            prefix=".ocr-store.", suffix=".jsonl", encoding="utf-8"
-        ) as f:
-            f.write(data)
-            tmp_path = f.name
-        os.replace(tmp_path, raw_path)
-        eprint("cached")
-    else:
-        eprint(f"partial OCR; not cached ({len(pages)} valid pages)")
-
-    print_formatted(Path(args.pdf_input).name, pages)
+    missing = [page for page in page_numbers or [] if page not in pages]
+    if missing:
+        eprint("missing pages: " + ",".join(str(page) for page in missing))
+    print_pages(pdf, pages)
     return EXIT_OK
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="scripts/ocr_cache.py",
-        description="Minimal deterministic cache CLI for ocr-tool OCR reuse.",
+        description="OCR a PDF and cache each successful page.",
     )
-    sub = parser.add_subparsers(dest="subcommand", required=True)
-
-    for name, fn in (("read", cmd_read), ("store", cmd_store)):
-        p = sub.add_parser(name)
-        p.add_argument("--pdf-input", required=True)
-        p.add_argument("--page-sel", default=DEFAULT_PAGE_SEL)
-        p.set_defaults(func=fn)
-
+    parser.add_argument("pdf", type=Path)
+    parser.add_argument("pages", nargs="?", help='optional page selection, such as "1-5,8"')
     return parser
 
 
 def main() -> int:
-    parser = build_parser()
-    args = parser.parse_args()
+    args = build_parser().parse_args()
     try:
-        return int(args.func(args))
+        return extract(args.pdf, args.pages)
+    except ValueError as exc:
+        eprint(str(exc))
+        return EXIT_INVALID_ARGS
     except BrokenPipeError:
         return EXIT_OK
     except Exception as exc:

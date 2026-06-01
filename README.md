@@ -7,7 +7,7 @@
 
 It provides one workflow:
 - extracts text from full PDFs or selected page ranges
-- reuses cached OCR output when the same file and page selection is requested again
+- caches OCR output one page at a time so overlapping requests reuse prior work
 - installs `pdfocr` when needed
 - returns cleaned extracted text for downstream skills or tasks
 
