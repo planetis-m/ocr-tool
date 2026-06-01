@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 CACHE_DIR = Path(".ocr-tool-cache")
-ALL_PAGES_FILE = ".all-pages.json"
 
 EXIT_OK = 0
 EXIT_RUNTIME_ERROR = 1
@@ -23,14 +22,14 @@ def eprint(message: str) -> None:
     print(f"ocr-cache: {message}", file=sys.stderr)
 
 
-def document_cache_dir(pdf: Path) -> Path:
+def document_cache_path(pdf: Path) -> Path:
     pdf = pdf.expanduser().resolve()
     if not pdf.is_file():
         raise ValueError(f"PDF does not exist: {pdf}")
 
     stat = pdf.stat()
     seed = f"{pdf}\n{stat.st_size}\n{stat.st_mtime_ns}".encode("utf-8")
-    return CACHE_DIR / hashlib.sha256(seed).hexdigest()[:32]
+    return CACHE_DIR / f"{hashlib.sha256(seed).hexdigest()[:32]}.json"
 
 
 def parse_pages(selection: str) -> list[int]:
@@ -71,47 +70,31 @@ def valid_page(obj: object) -> bool:
     )
 
 
-def read_page(cache_dir: Path, page: int) -> dict | None:
+def read_cache(cache_path: Path) -> dict:
     try:
-        obj = json.loads((cache_dir / f"{page}.json").read_text(encoding="utf-8"))
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-    return obj if valid_page(obj) and obj["page"] == page else None
+        return {"complete": False, "pages": {}}
 
-
-def write_page(cache_dir: Path, obj: dict) -> None:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    (cache_dir / f"{obj['page']}.json").write_text(
-        json.dumps(obj, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-
-
-def read_all_pages(cache_dir: Path) -> list[int] | None:
-    try:
-        pages = json.loads((cache_dir / ALL_PAGES_FILE).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-
-    if (
-        not isinstance(pages, list)
-        or not pages
-        or any(not isinstance(page, int) or isinstance(page, bool) or page < 1 for page in pages)
-    ):
-        return None
-    return sorted(set(pages))
-
-
-def write_all_pages(cache_dir: Path, pages: list[int]) -> None:
-    (cache_dir / ALL_PAGES_FILE).write_text(json.dumps(sorted(pages)) + "\n", encoding="utf-8")
-
-
-def read_pages(cache_dir: Path, page_numbers: list[int]) -> dict[int, dict]:
     pages = {}
-    for page_number in page_numbers:
-        obj = read_page(cache_dir, page_number)
-        if obj is not None:
-            pages[page_number] = obj
-    return pages
+    if isinstance(cache, dict) and isinstance(cache.get("pages"), dict):
+        for obj in cache["pages"].values():
+            if valid_page(obj):
+                pages[str(obj["page"])] = obj
+    return {"complete": cache.get("complete") is True and bool(pages), "pages": pages}
+
+
+def write_cache(cache_path: Path, cache: dict) -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def select_pages(cache: dict, page_numbers: list[int]) -> dict[int, dict]:
+    return {
+        page: cache["pages"][str(page)]
+        for page in page_numbers
+        if str(page) in cache["pages"]
+    }
 
 
 def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, dict], bool] | None:
@@ -157,46 +140,50 @@ def print_pages(pdf: Path, pages: dict[int, dict]) -> None:
 
 
 def extract(pdf: Path, selection: str | None) -> int:
-    cache_dir = document_cache_dir(pdf)
+    cache_path = document_cache_path(pdf)
+    cache = read_cache(cache_path)
 
     if selection is None:
-        page_numbers = read_all_pages(cache_dir)
-        if page_numbers is not None:
-            pages = read_pages(cache_dir, page_numbers)
-            if len(pages) == len(page_numbers):
-                print_pages(pdf, pages)
-                return EXIT_OK
+        if cache["complete"]:
+            print_pages(pdf, {int(page): obj for page, obj in cache["pages"].items()})
+            return EXIT_OK
 
         extracted = run_pdfocr(pdf, None)
         if extracted is None:
             return EXIT_RUNTIME_ERROR
-        pages, complete = extracted
-        for obj in pages.values():
-            write_page(cache_dir, obj)
+        new_pages, complete = extracted
+        for page, obj in new_pages.items():
+            cache["pages"][str(page)] = obj
         if complete:
-            write_all_pages(cache_dir, list(pages))
-        elif pages:
+            cache["complete"] = True
+        if new_pages:
+            write_cache(cache_path, cache)
+        if not complete and cache["pages"]:
             eprint("partial OCR; cached valid pages only")
+        pages = {int(page): obj for page, obj in cache["pages"].items()}
     else:
         page_numbers = parse_pages(selection)
-        pages = read_pages(cache_dir, page_numbers)
+        pages = select_pages(cache, page_numbers)
         missing = [page for page in page_numbers if page not in pages]
         if missing:
             extracted = run_pdfocr(pdf, missing)
             if extracted is None:
                 return EXIT_RUNTIME_ERROR
             new_pages, _ = extracted
-            for obj in new_pages.values():
-                write_page(cache_dir, obj)
-            pages.update(read_pages(cache_dir, missing))
+            for page, obj in new_pages.items():
+                cache["pages"][str(page)] = obj
+            if new_pages:
+                write_cache(cache_path, cache)
+            pages = select_pages(cache, page_numbers)
 
     if not pages:
         eprint("no valid OCR text")
         return EXIT_NO_TEXT
 
-    missing = [page for page in page_numbers or [] if page not in pages]
-    if missing:
-        eprint("missing pages: " + ",".join(str(page) for page in missing))
+    if selection is not None:
+        missing = [page for page in page_numbers if page not in pages]
+        if missing:
+            eprint("missing pages: " + ",".join(str(page) for page in missing))
     print_pages(pdf, pages)
     return EXIT_OK
 
