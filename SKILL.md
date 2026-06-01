@@ -27,20 +27,20 @@ overlapping page ranges to reuse work.
 - Exit code `3`: no valid text was extracted.
 - Exit code `1` or `2`: stop and report the failure.
 
+## Readiness
+
+- Run `pdfocr --help`.
+- If `pdfocr` is missing or fails to start, read
+  [references/pdfocr-install.md](references/pdfocr-install.md), install the
+  binary or missing runtime dependency, and retry.
+- After installing `pdfocr`, tell the user how to configure
+  `DEEPINFRA_API_KEY` or `config.json` before running OCR.
+
 ## Process PDF Input
 
 Extract text exclusively through `pdfocr` shell execution.
 
 - Do not read PDFs with direct file readers or ad hoc parsers when this skill is active.
-
-### Installation
-
-Run the installation steps only when the cache command reports that `pdfocr` is
-not installed.
-
-- Check for `pdfocr` with `command -v pdfocr`.
-- If it is missing, read [references/pdfocr-install.md](references/pdfocr-install.md) and attempt installation.
-- Check again after installation. If it is still missing, stop and report the failure.
 
 ### Execution
 

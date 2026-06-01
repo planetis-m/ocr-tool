@@ -1,6 +1,6 @@
 # pdfocr Install Fallback
 
-Use this only when `command -v pdfocr` fails.
+Use this when `pdfocr` is missing or fails to start.
 
 Install only under the user's home directory, never inside the current
 workspace.
@@ -22,6 +22,7 @@ mkdir -p "$HOME/.local/opt/pdfocr/current"
 tar -xzf "$HOME/.local/opt/pdfocr/pdfocr.tar.gz" -C "$HOME/.local/opt/pdfocr/current"
 ln -sfn "$HOME/.local/opt/pdfocr/current/pdfocr" "$HOME/.local/bin/pdfocr"
 export PATH="$HOME/.local/bin:$PATH"
+pdfocr --help >/dev/null
 ```
 
 ## macOS arm64
@@ -36,6 +37,7 @@ mkdir -p "$HOME/.local/opt/pdfocr/current"
 tar -xzf "$HOME/.local/opt/pdfocr/pdfocr.tar.gz" -C "$HOME/.local/opt/pdfocr/current"
 ln -sfn "$HOME/.local/opt/pdfocr/current/pdfocr" "$HOME/.local/bin/pdfocr"
 export PATH="$HOME/.local/bin:$PATH"
+pdfocr --help >/dev/null
 ```
 
 ## Windows x86_64 (PowerShell)
@@ -52,6 +54,7 @@ Expand-Archive -Path $zip -DestinationPath (Join-Path $dst "current") -Force
 $exe = Get-ChildItem -Path (Join-Path $dst "current") -Recurse -Filter "pdfocr.exe" | Select-Object -First 1
 $exeDir = Split-Path -Parent $exe.FullName
 $env:Path = "$exeDir;$env:Path"
+pdfocr --help | Out-Null
 ```
 
 ## API Key Setup
