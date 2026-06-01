@@ -59,6 +59,10 @@ def parse_pages(selection: str) -> list[int]:
     return sorted(pages)
 
 
+def valid_text(text: object) -> bool:
+    return isinstance(text, str) and bool(text.strip())
+
+
 def valid_page(obj: object) -> bool:
     return (
         isinstance(obj, dict)
@@ -66,8 +70,7 @@ def valid_page(obj: object) -> bool:
         and isinstance(obj.get("page"), int)
         and not isinstance(obj.get("page"), bool)
         and obj["page"] > 0
-        and isinstance(obj.get("text"), str)
-        and bool(obj["text"].strip())
+        and valid_text(obj.get("text"))
     )
 
 
@@ -79,9 +82,9 @@ def read_cache(cache_path: Path) -> dict:
 
     pages = {}
     if isinstance(cache, dict) and isinstance(cache.get("pages"), dict):
-        for obj in cache["pages"].values():
-            if valid_page(obj):
-                pages[str(obj["page"])] = obj
+        for page, text in cache["pages"].items():
+            if page.isdigit() and int(page) > 0 and valid_text(text):
+                pages[page] = text
     return {"complete": cache.get("complete") is True and bool(pages), "pages": pages}
 
 
@@ -90,7 +93,7 @@ def write_cache(cache_path: Path, cache: dict) -> None:
     cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def select_pages(cache: dict, page_numbers: list[int]) -> dict[int, dict]:
+def select_pages(cache: dict, page_numbers: list[int]) -> dict[int, str]:
     return {
         page: cache["pages"][str(page)]
         for page in page_numbers
@@ -98,7 +101,7 @@ def select_pages(cache: dict, page_numbers: list[int]) -> dict[int, dict]:
     }
 
 
-def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, dict], bool] | None:
+def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, str], bool] | None:
     page_arg = "--all-pages"
     if page_numbers is not None:
         page_arg = "--pages:" + ",".join(str(page) for page in page_numbers)
@@ -128,15 +131,15 @@ def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, dic
         except json.JSONDecodeError:
             continue
         if valid_page(obj):
-            pages[obj["page"]] = obj
+            pages[obj["page"]] = obj["text"]
 
     return pages, bool(lines) and len(pages) == len(lines)
 
 
-def write_output(pdf: Path, pages: dict[int, dict]) -> None:
+def write_output(pdf: Path, pages: dict[int, str]) -> None:
     result = [f"File: {pdf.name} | Pages: {len(pages)}"]
     for page_number in sorted(pages):
-        result.append(f"\n<page n={page_number}>\n{pages[page_number]['text'].strip()}")
+        result.append(f"\n<page n={page_number}>\n{pages[page_number].strip()}")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text("\n".join(result) + "\n", encoding="utf-8")
     page_word = "page" if len(pages) == 1 else "pages"
@@ -149,22 +152,22 @@ def extract(pdf: Path, selection: str | None) -> int:
 
     if selection is None:
         if cache["complete"]:
-            write_output(pdf, {int(page): obj for page, obj in cache["pages"].items()})
+            write_output(pdf, {int(page): text for page, text in cache["pages"].items()})
             return EXIT_OK
 
         extracted = run_pdfocr(pdf, None)
         if extracted is None:
             return EXIT_RUNTIME_ERROR
         new_pages, complete = extracted
-        for page, obj in new_pages.items():
-            cache["pages"][str(page)] = obj
+        for page, text in new_pages.items():
+            cache["pages"][str(page)] = text
         if complete:
             cache["complete"] = True
         if new_pages:
             write_cache(cache_path, cache)
         if not complete and cache["pages"]:
             eprint("partial OCR; cached valid pages only")
-        pages = {int(page): obj for page, obj in cache["pages"].items()}
+        pages = {int(page): text for page, text in cache["pages"].items()}
     else:
         page_numbers = parse_pages(selection)
         pages = select_pages(cache, page_numbers)
@@ -174,8 +177,8 @@ def extract(pdf: Path, selection: str | None) -> int:
             if extracted is None:
                 return EXIT_RUNTIME_ERROR
             new_pages, _ = extracted
-            for page, obj in new_pages.items():
-                cache["pages"][str(page)] = obj
+            for page, text in new_pages.items():
+                cache["pages"][str(page)] = text
             if new_pages:
                 write_cache(cache_path, cache)
             pages = select_pages(cache, page_numbers)
