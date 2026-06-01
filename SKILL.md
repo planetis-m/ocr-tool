@@ -9,12 +9,6 @@ Use this skill only to extract source text from PDFs.
 
 Do not add verification steps unless the user explicitly asks.
 
-## Scope
-
-This skill owns all `pdfocr` usage.
-
-- Use it when the input is a PDF that must be converted to text.
-
 ## Session OCR Cache
 
 Run the cache command directly from your current working directory.
@@ -32,19 +26,19 @@ Run the cache command directly from your current working directory.
 - After installing `pdfocr`, tell the user how to configure
   `DEEPINFRA_API_KEY` or `config.json` before running OCR.
 
+## Execution
+
+- Request unrestricted network or escalated execution directly when running
+  `pdfocr`. Do not run a sandboxed network probe first.
+- Do not inspect environment variables, shell profiles, or filesystem files to
+  discover API keys. If authentication fails, ask the user to configure the
+  key, then retry.
+
 ## Process PDF Input
 
 Extract text exclusively through `pdfocr` shell execution.
 
 - Do not read PDFs with direct file readers or ad hoc parsers when this skill is active.
-
-### Execution
-
-- Request unrestricted network or escalated execution directly in the tool call.
-  Do not run a sandboxed `pdfocr` probe first.
-- Do not inspect environment variables, shell profiles, or filesystem files to discover API keys.
-  If OCR reports an auth or config failure, report the error and ask the user to configure
-  `DEEPINFRA_API_KEY` or `config.json`, then retry.
 
 ### Usage
 
