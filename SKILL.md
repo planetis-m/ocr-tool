@@ -1,11 +1,11 @@
 ---
 name: ocr-tool
-description: Extracts text from PDFs using the `pdfocr` CLI. Use this skill as a foundational step to convert document content into raw text for downstream processing.
+description: Extract raw text from PDF files with OCR, including full-document extraction, selected page ranges, and reuse of cached pages. Use when a user asks to OCR a PDF, extract text from a scanned PDF, or read selected PDF pages.
 ---
 
 # OCR Tool
 
-Use this skill only to extract source text. Do not generate final processed outputs or summaries here; hand off the extracted raw text to the next step unless the user explicitly asks only for the OCR text.
+Use this skill only to extract source text from PDFs.
 
 Do not add verification steps unless the user explicitly asks.
 
@@ -14,7 +14,6 @@ Do not add verification steps unless the user explicitly asks.
 This skill owns all `pdfocr` usage.
 
 - Use it when the input is a PDF that must be converted to text.
-- After extraction, pass the resulting text to the next relevant skill or continue with the user's downstream task.
 
 ## Session OCR Cache
 
@@ -53,7 +52,7 @@ not installed.
 
 ## Clean OCR Text
 
-Before handing extracted text to another task, remove only clear metadata, such as:
+Before returning extracted text, remove only clear metadata, such as:
 
 - Headers and footers
 - Page numbers
