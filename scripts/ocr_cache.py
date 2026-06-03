@@ -17,7 +17,6 @@ EXIT_OK = 0
 EXIT_RUNTIME_ERROR = 1
 EXIT_INVALID_ARGS = 2
 EXIT_NO_TEXT = 3
-EXIT_PARTIAL_PROGRESS = 4
 PDFOCR_OK = 0
 PDFOCR_PARTIAL_FAILURE = 2
 
@@ -104,7 +103,18 @@ def select_pages(cache: dict, page_numbers: list[int]) -> dict[int, str]:
     }
 
 
-def store_pages(cache_path: Path, cache: dict, pages: dict[int, str]) -> None:
+def cache_status(cache: dict, page_numbers: list[int] | None) -> tuple[dict[int, str], list[int] | None]:
+    if page_numbers is None:
+        if cache["complete"]:
+            return {int(page): text for page, text in cache["pages"].items()}, []
+        return {}, None
+
+    pages = select_pages(cache, page_numbers)
+    missing = [page for page in page_numbers if page not in pages]
+    return pages, missing
+
+
+def cache_pages(cache_path: Path, cache: dict, pages: dict[int, str]) -> None:
     for page, text in pages.items():
         cache["pages"][str(page)] = text
     if pages:
@@ -160,56 +170,40 @@ def write_output(pdf: Path, pages: dict[int, str], output_path: Path) -> None:
 def extract(pdf: Path, selection: str | None, output_path: Path) -> int:
     cache_path = document_cache_path(pdf)
     cache = read_cache(cache_path)
+    page_numbers = parse_pages(selection) if selection is not None else None
 
-    if selection is None:
-        if cache["complete"]:
-            write_output(pdf, {int(page): text for page, text in cache["pages"].items()}, output_path)
-            return EXIT_OK
+    pages, missing = cache_status(cache, page_numbers)
+    if missing == []:
+        write_output(pdf, pages, output_path)
+        return EXIT_OK
 
-        extracted = run_pdfocr(pdf, None)
-        if extracted is None:
-            return EXIT_RUNTIME_ERROR
-        pdfocr_exit, pdfocr_pages = extracted
-        store_pages(cache_path, cache, pdfocr_pages)
+    extracted = run_pdfocr(pdf, missing)
+    if extracted is None:
+        return EXIT_RUNTIME_ERROR
 
-        if pdfocr_exit == PDFOCR_PARTIAL_FAILURE:
-            if pdfocr_pages:
-                eprint("partial OCR; cached valid pages only")
-                return EXIT_PARTIAL_PROGRESS
+    pdfocr_exit, pdfocr_pages = extracted
+    cache_pages(cache_path, cache, pdfocr_pages)
+
+    if pdfocr_exit == PDFOCR_PARTIAL_FAILURE:
+        if pdfocr_pages:
+            eprint("partial OCR; cached valid pages only")
+        else:
             eprint("pdfocr returned page errors and no valid text")
-            return EXIT_RUNTIME_ERROR
+        return EXIT_RUNTIME_ERROR
 
+    if page_numbers is None:
         if not pdfocr_pages:
             eprint("no valid OCR text")
             return EXIT_NO_TEXT
         cache["complete"] = True
         write_cache(cache_path, cache)
-        pages = {int(page): text for page, text in cache["pages"].items()}
-    else:
-        page_numbers = parse_pages(selection)
-        pages = select_pages(cache, page_numbers)
-        missing = [page for page in page_numbers if page not in pages]
-        if missing:
-            extracted = run_pdfocr(pdf, missing)
-            if extracted is None:
-                return EXIT_RUNTIME_ERROR
-            pdfocr_exit, pdfocr_pages = extracted
-            store_pages(cache_path, cache, pdfocr_pages)
-            pages = select_pages(cache, page_numbers)
-            missing = [page for page in page_numbers if page not in pages]
-            if missing:
-                eprint("missing pages: " + ",".join(str(page) for page in missing))
-                if pdfocr_exit == PDFOCR_PARTIAL_FAILURE and pdfocr_pages:
-                    return EXIT_PARTIAL_PROGRESS
-                if pdfocr_exit == PDFOCR_PARTIAL_FAILURE:
-                    return EXIT_RUNTIME_ERROR
-                if pages:
-                    return EXIT_RUNTIME_ERROR
-                return EXIT_NO_TEXT
+        write_output(pdf, pdfocr_pages, output_path)
+        return EXIT_OK
 
-    if not pages:
-        eprint("no valid OCR text")
-        return EXIT_NO_TEXT
+    pages, missing = cache_status(cache, page_numbers)
+    if missing:
+        eprint("missing pages: " + ",".join(str(page) for page in missing))
+        return EXIT_RUNTIME_ERROR if pdfocr_pages else EXIT_NO_TEXT
 
     write_output(pdf, pages, output_path)
     return EXIT_OK
