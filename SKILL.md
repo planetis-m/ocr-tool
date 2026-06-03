@@ -16,6 +16,7 @@ Run the cache command directly from your current working directory.
 - Default output: `.ocr-tool-cache/output.txt`.
 - Use `--output PATH` when a specific output file is better for the task.
 - Exit code `0`: read all of the output file.
+- Exit code `4`: retry the same command.
 - Exit code `3`: no valid text was extracted.
 - Exit code `1` or `2`: stop and report the failure.
 

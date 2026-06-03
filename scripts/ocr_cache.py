@@ -17,6 +17,9 @@ EXIT_OK = 0
 EXIT_RUNTIME_ERROR = 1
 EXIT_INVALID_ARGS = 2
 EXIT_NO_TEXT = 3
+EXIT_PARTIAL_PROGRESS = 4
+PDFOCR_OK = 0
+PDFOCR_PARTIAL_FAILURE = 2
 
 
 def eprint(message: str) -> None:
@@ -101,7 +104,14 @@ def select_pages(cache: dict, page_numbers: list[int]) -> dict[int, str]:
     }
 
 
-def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, str], bool] | None:
+def store_pages(cache_path: Path, cache: dict, pages: dict[int, str]) -> None:
+    for page, text in pages.items():
+        cache["pages"][str(page)] = text
+    if pages:
+        write_cache(cache_path, cache)
+
+
+def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[int, dict[int, str]] | None:
     page_arg = "--all-pages"
     if page_numbers is not None:
         page_arg = "--pages:" + ",".join(str(page) for page in page_numbers)
@@ -119,13 +129,14 @@ def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, str
 
     if result.stderr.strip():
         print(result.stderr.rstrip(), file=sys.stderr)
-    if result.returncode != 0:
+    if result.returncode not in (PDFOCR_OK, PDFOCR_PARTIAL_FAILURE):
         eprint(f"pdfocr failed with exit code {result.returncode}")
         return None
 
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
     pages = {}
-    for line in lines:
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
         try:
             obj = json.loads(line)
         except json.JSONDecodeError:
@@ -133,7 +144,7 @@ def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, str
         if valid_page(obj):
             pages[obj["page"]] = obj["text"]
 
-    return pages, bool(lines) and len(pages) == len(lines)
+    return result.returncode, pages
 
 
 def write_output(pdf: Path, pages: dict[int, str], output_path: Path) -> None:
@@ -158,15 +169,21 @@ def extract(pdf: Path, selection: str | None, output_path: Path) -> int:
         extracted = run_pdfocr(pdf, None)
         if extracted is None:
             return EXIT_RUNTIME_ERROR
-        new_pages, complete = extracted
-        for page, text in new_pages.items():
-            cache["pages"][str(page)] = text
-        if complete:
-            cache["complete"] = True
-        if new_pages:
-            write_cache(cache_path, cache)
-        if not complete and cache["pages"]:
-            eprint("partial OCR; cached valid pages only")
+        pdfocr_exit, pdfocr_pages = extracted
+        store_pages(cache_path, cache, pdfocr_pages)
+
+        if pdfocr_exit == PDFOCR_PARTIAL_FAILURE:
+            if pdfocr_pages:
+                eprint("partial OCR; cached valid pages only")
+                return EXIT_PARTIAL_PROGRESS
+            eprint("pdfocr returned page errors and no valid text")
+            return EXIT_RUNTIME_ERROR
+
+        if not pdfocr_pages:
+            eprint("no valid OCR text")
+            return EXIT_NO_TEXT
+        cache["complete"] = True
+        write_cache(cache_path, cache)
         pages = {int(page): text for page, text in cache["pages"].items()}
     else:
         page_numbers = parse_pages(selection)
@@ -176,21 +193,24 @@ def extract(pdf: Path, selection: str | None, output_path: Path) -> int:
             extracted = run_pdfocr(pdf, missing)
             if extracted is None:
                 return EXIT_RUNTIME_ERROR
-            new_pages, _ = extracted
-            for page, text in new_pages.items():
-                cache["pages"][str(page)] = text
-            if new_pages:
-                write_cache(cache_path, cache)
+            pdfocr_exit, pdfocr_pages = extracted
+            store_pages(cache_path, cache, pdfocr_pages)
             pages = select_pages(cache, page_numbers)
+            missing = [page for page in page_numbers if page not in pages]
+            if missing:
+                eprint("missing pages: " + ",".join(str(page) for page in missing))
+                if pdfocr_exit == PDFOCR_PARTIAL_FAILURE and pdfocr_pages:
+                    return EXIT_PARTIAL_PROGRESS
+                if pdfocr_exit == PDFOCR_PARTIAL_FAILURE:
+                    return EXIT_RUNTIME_ERROR
+                if pages:
+                    return EXIT_RUNTIME_ERROR
+                return EXIT_NO_TEXT
 
     if not pages:
         eprint("no valid OCR text")
         return EXIT_NO_TEXT
 
-    if selection is not None:
-        missing = [page for page in page_numbers if page not in pages]
-        if missing:
-            eprint("missing pages: " + ",".join(str(page) for page in missing))
     write_output(pdf, pages, output_path)
     return EXIT_OK
 
