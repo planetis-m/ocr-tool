@@ -13,7 +13,9 @@ Do not add verification steps unless the user explicitly asks.
 
 Run the cache command directly from your current working directory.
 
-- Exit code `0`: read all of `.ocr-tool-cache/output.txt`.
+- Default output: `.ocr-tool-cache/output.txt`.
+- Use `--output PATH` when a specific output file is better for the task.
+- Exit code `0`: read all of the output file.
 - Exit code `3`: no valid text was extracted.
 - Exit code `1` or `2`: stop and report the failure.
 
@@ -43,7 +45,8 @@ Extract text exclusively through `pdfocr` shell execution.
 ### Usage
 
 - Full document: `python3 <SKILL_PATH>/scripts/ocr_cache.py INPUT.pdf`
-- Page ranges: `python3 <SKILL_PATH>/scripts/ocr_cache.py INPUT.pdf "8-20,22-27"`
+- Page ranges: `python3 <SKILL_PATH>/scripts/ocr_cache.py INPUT.pdf --pages "8-20,22-27"`
+- Custom output: `python3 <SKILL_PATH>/scripts/ocr_cache.py INPUT.pdf --output ocr.txt`
 
 ## Clean OCR Text
 

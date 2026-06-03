@@ -136,23 +136,23 @@ def run_pdfocr(pdf: Path, page_numbers: list[int] | None) -> tuple[dict[int, str
     return pages, bool(lines) and len(pages) == len(lines)
 
 
-def write_output(pdf: Path, pages: dict[int, str]) -> None:
+def write_output(pdf: Path, pages: dict[int, str], output_path: Path) -> None:
     result = [f"File: {pdf.name} | Pages: {len(pages)}"]
     for page_number in sorted(pages):
         result.append(f"\n<page n={page_number}>\n{pages[page_number].strip()}")
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text("\n".join(result) + "\n", encoding="utf-8")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(result) + "\n", encoding="utf-8")
     page_word = "page" if len(pages) == 1 else "pages"
-    print(f"ocr-cache: wrote {len(pages)} {page_word} to {OUTPUT_PATH}")
+    print(f"ocr-cache: wrote {len(pages)} {page_word} to {output_path}")
 
 
-def extract(pdf: Path, selection: str | None) -> int:
+def extract(pdf: Path, selection: str | None, output_path: Path) -> int:
     cache_path = document_cache_path(pdf)
     cache = read_cache(cache_path)
 
     if selection is None:
         if cache["complete"]:
-            write_output(pdf, {int(page): text for page, text in cache["pages"].items()})
+            write_output(pdf, {int(page): text for page, text in cache["pages"].items()}, output_path)
             return EXIT_OK
 
         extracted = run_pdfocr(pdf, None)
@@ -191,7 +191,7 @@ def extract(pdf: Path, selection: str | None) -> int:
         missing = [page for page in page_numbers if page not in pages]
         if missing:
             eprint("missing pages: " + ",".join(str(page) for page in missing))
-    write_output(pdf, pages)
+    write_output(pdf, pages, output_path)
     return EXIT_OK
 
 
@@ -201,14 +201,15 @@ def build_parser() -> argparse.ArgumentParser:
         description="OCR a PDF and cache each successful page.",
     )
     parser.add_argument("pdf", type=Path)
-    parser.add_argument("pages", nargs="?", help='optional page selection, such as "1-5,8"')
+    parser.add_argument("--pages", help='optional page selection, such as "1-5,8"')
+    parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
     try:
-        return extract(args.pdf, args.pages)
+        return extract(args.pdf, args.pages, args.output)
     except ValueError as exc:
         eprint(str(exc))
         return EXIT_INVALID_ARGS

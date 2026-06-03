@@ -9,7 +9,7 @@ It provides one workflow:
 - extracts text from full PDFs or selected page ranges
 - caches OCR output one page at a time so overlapping requests reuse prior work
 - installs `pdfocr` when needed
-- writes extracted text to `.ocr-tool-cache/output.txt` for chunked reading
+- writes extracted text to `.ocr-tool-cache/output.txt` or a chosen output file
 
 This skill is intentionally limited to extraction. Use another skill after OCR
 if you want notes, flashcards, quizzes, or other transformed outputs.
